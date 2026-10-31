@@ -1,0 +1,11 @@
+# 忽略系统/编辑器杂项
+.DS_Store
+Thumbs.db
+*.swp
+*.log
+
+# 打包产物与本地环境
+*.zip
+__pycache__/
+*.pyc
+.venv/

@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>URDF Viewer</title>
+<style>
+  :root{
+    --bg:#14171d; --panel:#1b1f27; --panel2:#232833; --line:#2f3743;
+    --fg:#dfe6ee; --muted:#8b96a5; --accent:#4a90d9; --accent2:#3b6ea5;
+    --ok:#5fbf7f; --err:#e06c6c;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--fg);
+            font-family:-apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;font-size:13px}
+  #app{display:flex;height:100%}
+  #sidebar{width:320px;min-width:320px;height:100%;display:flex;flex-direction:column;
+           background:var(--panel);border-right:1px solid var(--line)}
+  #sidebar h1{font-size:14px;margin:0;padding:12px 14px;border-bottom:1px solid var(--line);
+              font-weight:600;letter-spacing:.3px}
+  #sidebar h1 small{color:var(--muted);font-weight:400;font-size:11px}
+  .section{padding:10px 12px;border-bottom:1px solid var(--line)}
+  .section-title{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:8px}
+  /* file browser */
+  #pathBar{font-family:ui-monospace,monospace;font-size:12px;color:var(--accent);
+           background:var(--panel2);border:1px solid var(--line);border-radius:6px;
+           padding:5px 8px;margin-bottom:6px;word-break:break-all}
+  #fileList{max-height:200px;overflow-y:auto;border:1px solid var(--line);border-radius:6px;background:var(--panel2)}
+  .item{padding:5px 8px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px}
+  .item:hover{background:#2c3442}
+  .item.dir{color:#e2c275}
+  .item.file{color:#8fc7ff}
+  .item.active{background:var(--accent2);color:#fff}
+  .manual{display:flex;gap:6px;margin-top:6px}
+  .manual input{flex:1;background:var(--panel2);border:1px solid var(--line);border-radius:6px;
+                color:var(--fg);padding:4px 8px;font-size:12px;font-family:ui-monospace,monospace}
+  .manual button{padding:4px 10px}
+  /* joints */
+  #joints{flex:1;overflow-y:auto;padding:8px 12px}
+  .joint{margin:9px 0}
+  .joint .head{display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px}
+  .joint .jname{color:#cfd8e3;font-family:ui-monospace,monospace}
+  .joint .jrange{color:var(--muted)}
+  .joint .val{color:var(--accent);font-family:ui-monospace,monospace;font-weight:600;
+              width:64px;min-width:64px;flex:0 0 64px;text-align:right}
+  .joint input[type=range]{flex:1 1 auto;min-width:0;width:auto;accent-color:var(--accent);height:16px}
+  /* buttons */
+  #toolbar{padding:10px 12px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:6px}
+  button{background:var(--panel2);color:var(--fg);border:1px solid var(--line);border-radius:6px;
+         padding:6px 10px;cursor:pointer;font-size:12px;transition:.12s}
+  button:hover{background:#2c3442}
+  button.on{background:var(--accent2);border-color:#4a86c5;color:#fff}
+  #status{padding:6px 12px;border-top:1px solid var(--line);font-size:11px;color:var(--muted);
+          min-height:26px;word-break:break-all}
+  #status.err{color:var(--err)}
+  #status.ok{color:var(--ok)}
+  #view{flex:1;position:relative}
+  canvas{display:block}
+  #hint{position:absolute;left:12px;bottom:10px;font-size:11px;color:var(--muted);
+        background:rgba(20,23,29,.6);padding:4px 8px;border-radius:6px;pointer-events:none}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="sidebar">
+    <h1>URDF Viewer <small>· 关节 / 碰撞 / 坐标轴</small></h1>
+
+    <div class="section">
+      <div class="section-title">模型文件</div>
+      <div id="pathBar">/</div>
+      <div id="fileList">加载中…</div>
+      <div class="manual">
+        <input id="manualPath" placeholder="或输入路径 如 myrobot/urdf/robot.urdf">
+        <button id="btnLoad">加载</button>
+      </div>
+    </div>
+
+    <div class="section-title" style="padding:10px 12px 0">关节</div>
+    <div id="joints"></div>
+
+    <div id="toolbar">
+      <button id="btnVisual" class="on">Visual</button>
+      <button id="btnCollision">Collision</button>
+      <button id="btnAxis">Axis</button>
+      <button id="btnFrames">坐标系</button>
+      <button id="btnReset">回归默认</button>
+    </div>
+    <div id="status">就绪</div>
+  </div>
+
+  <div id="view">
+    <div id="hint">左键旋转 · 滚轮缩放 · 右键平移</div>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+    "three/examples/jsm/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import URDFLoader from 'https://unpkg.com/urdf-loader@0.12.3/src/URDFLoader.js';
+
+/* ---------- 配置：模型根目录 ----------
+   本页放在站点根目录，默认 ROOT='./'（即页面所在目录）。
+   你的 URDF 和网格放在本目录下（可分子文件夹），用左侧文件浏览器选择即可。
+   也可用 URL 参数覆盖： index.html?root=../other_robot/
+*/
+const params = new URLSearchParams(location.search);
+let ROOT = params.get('root') || './';
+if (!ROOT.endsWith('/')) ROOT += '/';
+const url = rel => ROOT + rel;
+
+const statusEl = document.getElementById('status');
+function setStatus(msg, cls=''){ statusEl.textContent = msg; statusEl.className = cls; }
+
+/* ---------- three 场景 ---------- */
+const viewEl = document.getElementById('view');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x14171d);
+
+const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 100);
+camera.position.set(0.8, 0.6, 0.9);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true, preserveDrawingBuffer:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+viewEl.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+
+scene.add(new THREE.HemisphereLight(0xffffff, 0x2a3040, 1.15));
+const d1 = new THREE.DirectionalLight(0xffffff, 1.5); d1.position.set(2, 3, 2); scene.add(d1);
+const d2 = new THREE.DirectionalLight(0xffffff, 0.6); d2.position.set(-2, 1, -2); scene.add(d2);
+
+// 地面网格（three 默认 Y-up，GridHelper 在 XZ 平面）
+const grid = new THREE.GridHelper(4, 40, 0x3a4150, 0x272d38);
+grid.material.opacity = 0.55; grid.material.transparent = true;
+scene.add(grid);
+
+// 全局坐标轴（世界系）
+const worldAxes = new THREE.AxesHelper(0.3);
+worldAxes.visible = false;
+scene.add(worldAxes);
+
+let _lastW = 0, _lastH = 0;
+function resize(){
+  const w = viewEl.clientWidth, h = viewEl.clientHeight;
+  if (!w || !h) return;
+  _lastW = w; _lastH = h;
+  camera.aspect = w / h; camera.updateProjectionMatrix();
+  renderer.setSize(w, h, true);
+}
+new ResizeObserver(() => resize()).observe(viewEl);
+
+/* ---------- 机器人状态 ---------- */
+let robot = null;
+let jointUI = [];        // {name, slider, valEl, toValue, isRot}
+const axisArrows = [];   // ArrowHelper[]
+const frameHelpers = []; // AxesHelper[]
+let flagVisual = true, flagCollision = false, flagAxis = false, flagFrames = false;
+
+const collMaterial = new THREE.MeshPhongMaterial({
+  color: 0xff9a4d, transparent: true, opacity: 0.35,
+  depthWrite: false, side: THREE.DoubleSide,
+});
+
+/* ---------- 文件浏览 ---------- */
+const pathBar = document.getElementById('pathBar');
+const fileList = document.getElementById('fileList');
+let curDir = ''; // 相对 ROOT
+
+/* 目录列表：优先问 serve.py 的 /__ls 接口（http.server 遇到 index.html 不列目录），
+   拿不到再退回解析服务器自己生成的 HTML 目录索引（nginx autoindex 等）。 */
+async function scanDir(rel){
+  const viaJson = await scanDirJson(rel);
+  if (viaJson) return viaJson;
+  return scanDirHtml(rel);
+}
+
+async function scanDirJson(rel){
+  const abs = new URL(url(rel), location.href);
+  const lsPath = abs.origin + '/__ls' + abs.pathname.replace(/\/*$/, '/');
+  let res;
+  try { res = await fetch(lsPath, { cache:'no-store' }); } catch (e){ return null; }
+  if (!res.ok) return null;
+  const ct = res.headers.get('Content-Type') || '';
+  if (!ct.includes('json')) return null;
+  let data;
+  try { data = await res.json(); } catch (e){ return null; }
+  if (!data || !Array.isArray(data.entries)) return null;
+  return data.entries.map(e => ({
+    name: e.name,
+    isDir: !!e.is_dir,
+    path: rel + encodeURIComponent(e.name) + (e.is_dir ? '/' : '')
+  }));
+}
+
+async function scanDirHtml(rel){
+  const res = await fetch(url(rel), { cache:'no-store' });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const txt = await res.text();
+  const doc = new DOMParser().parseFromString(txt, 'text/html');
+  if (doc.getElementById('app')){
+    throw new Error('该目录里有 index.html，服务器没有生成目录列表');
+  }
+  const out = [];
+  doc.querySelectorAll('a').forEach(a => {
+    const href = a.getAttribute('href');
+    if (!href) return;
+    if (href === '../' || href === '..' || href.startsWith('/') || href.startsWith('?') || href.startsWith('#')) return;
+    const isDir = href.endsWith('/');
+    const name = decodeURIComponent(href.replace(/\/$/, ''));
+    out.push({ name, isDir, path: rel + href });
+  });
+  return out;
+}
+
+async function refreshFiles(){
+  pathBar.textContent = '/' + curDir;
+  fileList.innerHTML = '加载中…';
+  let items;
+  try { items = await scanDir(curDir); }
+  catch (e){
+    fileList.innerHTML = '';
+    const d = document.createElement('div');
+    d.className = 'item'; d.style.color = 'var(--err)';
+    d.textContent = '无法列出目录（' + e.message + '）。可在下方手动输入路径。';
+    fileList.appendChild(d);
+    return;
+  }
+  fileList.innerHTML = '';
+  if (curDir !== ''){
+    const up = document.createElement('div');
+    up.className = 'item dir'; up.textContent = '⬆ 上一级';
+    up.onclick = () => { curDir = curDir.replace(/[^/]+\/$/, ''); refreshFiles(); };
+    fileList.appendChild(up);
+  }
+  items.sort((a,b) => (b.isDir - a.isDir) || a.name.localeCompare(b.name));
+  for (const it of items){
+    if (!it.isDir && !/\.(urdf|xacro)$/i.test(it.name)) continue;
+    const d = document.createElement('div');
+    d.className = 'item ' + (it.isDir ? 'dir' : 'file');
+    d.textContent = (it.isDir ? '📁 ' : '📄 ') + it.name;
+    d.onclick = () => {
+      if (it.isDir){ curDir = it.path; refreshFiles(); }
+      else { loadURDF(it.path); }
+    };
+    fileList.appendChild(d);
+  }
+}
+
+document.getElementById('btnLoad').onclick = () => {
+  const p = document.getElementById('manualPath').value.trim();
+  if (p) loadURDF(p);
+};
+
+/* ---------- 加载 URDF ---------- */
+function disposeRobot(obj){
+  obj.traverse(c => {
+    if (c.geometry) c.geometry.dispose();
+    if (c.material){
+      const ms = Array.isArray(c.material) ? c.material : [c.material];
+      ms.forEach(m => { if (m.map) m.map.dispose(); m.dispose(); });
+    }
+  });
+}
+
+function loadURDF(relPath){
+  setStatus('加载中: ' + relPath + ' …');
+  if (robot){ scene.remove(robot); disposeRobot(robot); robot = null; }
+  axisArrows.length = 0; frameHelpers.length = 0; jointUI.length = 0;
+  document.getElementById('joints').innerHTML = '';
+
+  const loader = new URDFLoader();
+  loader.parseCollision = true;
+  // 禁用 HTTP 缓存，避免刷新后仍读到旧 urdf / 旧 mesh
+  loader.fetchOptions = { cache: 'no-store' };
+
+  // 网格异步加载：全部完成后再取景 & 诊断
+  const manager = new THREE.LoadingManager();
+  loader.manager = manager;
+  manager.onLoad = () => {
+    if (!robot) return;
+    let meshCount = 0;
+    robot.traverse(c => { if (c.isMesh && c.geometry) meshCount++; });
+    frameCamera();
+    const b = new THREE.Box3().setFromObject(robot);
+    const sz = b.getSize(new THREE.Vector3());
+    setStatus(statusEl.textContent.replace(/ · meshes.*$/, '') +
+      ' · meshes=' + meshCount + ' · bbox=' + sz.x.toFixed(2) + '×' + sz.y.toFixed(2) + '×' + sz.z.toFixed(2), 'ok');
+  };
+
+  // 给 urdf 路径加时间戳，强制每次重新下载
+  const bust = p => p + (p.includes('?') ? '&' : '?') + 'v=' + Date.now();
+  loader.load(
+    bust(url(relPath)),
+    r => {
+      robot = r;
+      // URDF 数据为 Z-up，three 场景为 Y-up：整体绕 X 轴 -90° 摆正
+      robot.rotation.x = -Math.PI / 2;
+      scene.add(robot);
+
+      // 无显式 lower/upper 的关节（轮等）解除限位，便于拖动
+      for (const name in robot.joints){
+        const j = robot.joints[name];
+        const ln = j.urdfNode && j.urdfNode.querySelector ? j.urdfNode.querySelector('limit') : null;
+        if (!ln || !ln.hasAttribute('lower') || !ln.hasAttribute('upper')) j.ignoreLimits = true;
+      }
+
+      applyCollisionMaterial();
+      buildAxisMarkers();
+      buildFrameHelpers();
+      buildJointPanel();
+      frameCamera();
+      setFlags(flagVisual, flagCollision, flagAxis, flagFrames);
+
+      const nLinks = Object.keys(robot.links).length;
+      const nJoints = Object.keys(robot.joints).length;
+      setStatus('已加载: ' + relPath + '   (' + nLinks + ' links, ' + nJoints + ' joints)', 'ok');
+    },
+    null,
+    err => {
+      // 初始示例缺失时给友好提示，而非报错
+      if (/examples\/demo\.urdf/.test(relPath)){
+        setStatus('就绪：用左侧「模型文件」选择你的 .urdf 文件（未找到自带示例）', 'ok');
+      } else {
+        setStatus('加载失败: ' + (err && err.message ? err.message : err), 'err');
+      }
+    }
+  );
+}
+
+/* ---------- 碰撞体材质 ---------- */
+function applyCollisionMaterial(){
+  robot.traverse(c => {
+    if (c.isURDFCollider){
+      c.traverse(m => { if (m.isMesh) m.material = collMaterial; });
+    }
+  });
+}
+
+/* ---------- 关节轴箭头 ---------- */
+function buildAxisMarkers(){
+  const LEN = 0.09;
+  for (const name in robot.joints){
+    const j = robot.joints[name];
+    if (j.jointType === 'fixed') continue;
+    const dir = j.axis.clone().normalize();
+    const arrow = new THREE.ArrowHelper(dir, new THREE.Vector3(0,0,0), LEN, 0xffc83d, LEN*0.32, LEN*0.2);
+    arrow.visible = flagAxis;
+    j.add(arrow);           // 随关节放置
+    axisArrows.push(arrow);
+  }
+}
+
+/* ---------- link 坐标系（三色轴）---------- */
+function buildFrameHelpers(){
+  const SZ = 0.12;
+  for (const name in robot.links){
+    const link = robot.links[name];
+    const ax = new THREE.AxesHelper(SZ);
+    // 坐标轴始终可见，不被网格/模型遮挡
+    ax.traverse(o => { if (o.material){ o.material.depthTest = false; o.material.transparent = true; } });
+    ax.renderOrder = 999;
+    ax.visible = flagFrames;
+    link.add(ax);
+    frameHelpers.push(ax);
+  }
+}
+
+/* ---------- 关节面板 ---------- */
+function buildJointPanel(){
+  const box = document.getElementById('joints');
+  box.innerHTML = '';
+  const names = Object.keys(robot.joints).filter(n => robot.joints[n].jointType !== 'fixed');
+  if (names.length === 0){ box.innerHTML = '<div style="color:var(--muted);padding:8px">无活动关节</div>'; return; }
+
+  for (const name of names){
+    const j = robot.joints[name];
+    const isRot = (j.jointType === 'revolute' || j.jointType === 'continuous');
+    const hasLimit = isFinite(j.limit.lower) && isFinite(j.limit.upper) && !(j.limit.lower === 0 && j.limit.upper === 0);
+
+    let dLo, dHi, toValue, fmt;
+    if (isRot){
+      dLo = hasLimit ? j.limit.lower * 180/Math.PI : -180;
+      dHi = hasLimit ? j.limit.upper * 180/Math.PI :  180;
+      toValue = deg => deg * Math.PI/180;
+      fmt = v => v.toFixed(1) + '°';
+    } else {
+      dLo = hasLimit ? j.limit.lower : -0.2;
+      dHi = hasLimit ? j.limit.upper :  0.2;
+      toValue = v => v;
+      fmt = v => v.toFixed(3) + 'm';
+    }
+    if (dHi <= dLo) dHi = dLo + 1e-3;
+
+    const wrap = document.createElement('div'); wrap.className = 'joint';
+    const head = document.createElement('div'); head.className = 'head';
+    const jn = document.createElement('span'); jn.className = 'jname'; jn.textContent = name;
+    const jr = document.createElement('span'); jr.className = 'jrange';
+    jr.textContent = (isRot ? '范围 [' + dLo.toFixed(0) + '°, ' + dHi.toFixed(0) + '°]'
+                            : '范围 [' + dLo.toFixed(3) + ', ' + dHi.toFixed(3) + ']m');
+    head.appendChild(jn); head.appendChild(jr);
+
+    const val = document.createElement('span'); val.className = 'val';
+    const curVal = j.angle || 0;
+    val.textContent = fmt(isRot ? curVal*180/Math.PI : curVal);
+
+    const row2 = document.createElement('div');
+    row2.style.display = 'flex'; row2.style.alignItems = 'center'; row2.style.gap = '8px';
+
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min = dLo; slider.max = dHi; slider.step = (isRot ? 0.5 : 0.001);
+    slider.value = Math.min(Math.max(isRot ? curVal*180/Math.PI : curVal, dLo), dHi);
+
+    slider.oninput = () => {
+      const v = parseFloat(slider.value);
+      robot.setJointValue(name, toValue(v));
+      val.textContent = fmt(v);
+    };
+
+    row2.appendChild(slider); row2.appendChild(val);
+    wrap.appendChild(head); wrap.appendChild(row2);
+    box.appendChild(wrap);
+
+    jointUI.push({ name, slider, valEl: val, toValue, isRot, fmt, dLo, dHi });
+  }
+}
+
+/* ---------- 相机取景 ---------- */
+function frameCamera(){
+  const b = new THREE.Box3().setFromObject(robot);
+  if (!isFinite(b.min.x)) return;
+  const size = b.getSize(new THREE.Vector3());
+  const center = b.getCenter(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z) || 1;
+  const fov = camera.fov * Math.PI/180;
+  const dist = (maxDim/2) / Math.tan(fov/2) * 1.9;
+  controls.target.copy(center);
+  camera.position.set(center.x + dist*0.75, center.y + dist*0.45, center.z + dist*0.85);
+  camera.near = dist/100; camera.far = dist*100; camera.updateProjectionMatrix();
+  controls.update();
+}
+
+/* ---------- 开关 ---------- */
+function setFlags(vis, coll, axis, frames){
+  flagVisual = vis; flagCollision = coll; flagAxis = axis; flagFrames = frames;
+  if (robot){
+    robot.traverse(c => {
+      if (c.isURDFVisual) c.visible = vis;
+      if (c.isURDFCollider) c.visible = coll;
+    });
+  }
+  axisArrows.forEach(a => a.visible = axis);
+  frameHelpers.forEach(a => a.visible = frames);
+  document.getElementById('btnVisual').classList.toggle('on', vis);
+  document.getElementById('btnCollision').classList.toggle('on', coll);
+  document.getElementById('btnAxis').classList.toggle('on', axis);
+  document.getElementById('btnFrames').classList.toggle('on', frames);
+}
+
+document.getElementById('btnVisual').onclick    = () => setFlags(!flagVisual, flagCollision, flagAxis, flagFrames);
+document.getElementById('btnCollision').onclick = () => setFlags(flagVisual, !flagCollision, flagAxis, flagFrames);
+document.getElementById('btnAxis').onclick      = () => setFlags(flagVisual, flagCollision, !flagAxis, flagFrames);
+document.getElementById('btnFrames').onclick    = () => setFlags(flagVisual, flagCollision, flagAxis, !flagFrames);
+
+document.getElementById('btnReset').onclick = () => {
+  if (robot){
+    jointUI.forEach(u => {
+      u.slider.value = 0;
+      robot.setJointValue(u.name, u.toValue(0));
+      u.valEl.textContent = u.fmt(0);
+    });
+    frameCamera();
+  }
+  setFlags(true, false, false, false);
+};
+
+/* ---------- 渲染循环 ---------- */
+function animate(){
+  requestAnimationFrame(animate);
+  // 自愈：若视图尺寸变化但 ResizeObserver 没触发（首屏常见），主动重建
+  const w = viewEl.clientWidth, h = viewEl.clientHeight;
+  if (w && h && (w !== _lastW || h !== _lastH)) resize();
+  controls.update();
+  renderer.render(scene, camera);
+}
+
+/* ---------- 启动 ---------- */
+resize();
+animate();
+refreshFiles();
+// 尝试加载自带示例（若存在），否则等用户用文件浏览器选择
+loadURDF('examples/demo.urdf');
+
+// 暴露给控制台
+window.__viewer = {
+  get robot(){ return robot; },
+  get status(){ return statusEl.textContent; },
+  load: loadURDF,
+  setFlags,
+};
+</script>
+</body>
+</html>

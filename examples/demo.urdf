@@ -1,0 +1,85 @@
+<?xml version="1.0"?>
+<!--
+  URDF Viewer 自带示例：一个最简单的两连杆手臂（纯几何体，不需要任何网格文件）。
+  用途：验证查看器是否正常工作。加载后应能看到一个基座 + 两节手臂，并可用滑条拖动关节。
+  URDF 采用 Z-up（与多数机器人一致），查看器会自动摆正。
+-->
+<robot name="demo">
+
+  <material name="grey">  <color rgba="0.70 0.72 0.75 1.0"/></material>
+  <material name="orange"><color rgba="0.90 0.55 0.25 1.0"/></material>
+  <material name="blue">  <color rgba="0.30 0.55 0.85 1.0"/></material>
+
+  <!-- 基座 -->
+  <link name="base_link">
+    <inertial>
+      <origin xyz="0 0 0.05"/>
+      <mass value="1.0"/>
+      <inertia ixx="0.00417" ixy="0" ixz="0" iyy="0.00417" iyz="0" izz="0.00667"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0.05"/>
+      <geometry><box size="0.20 0.20 0.10"/></geometry>
+      <material name="grey"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0.05"/>
+      <geometry><box size="0.20 0.20 0.10"/></geometry>
+    </collision>
+  </link>
+
+  <!-- 大臂 -->
+  <link name="link1">
+    <inertial>
+      <origin xyz="0 0 0.15"/>
+      <mass value="0.5"/>
+      <inertia ixx="0.00385" ixy="0" ixz="0" iyy="0.00385" iyz="0" izz="0.00021"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0.15"/>
+      <geometry><box size="0.05 0.05 0.30"/></geometry>
+      <material name="orange"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0.15"/>
+      <geometry><box size="0.05 0.05 0.30"/></geometry>
+    </collision>
+  </link>
+
+  <!-- 小臂 -->
+  <link name="link2">
+    <inertial>
+      <origin xyz="0 0 0.125"/>
+      <mass value="0.3"/>
+      <inertia ixx="0.00160" ixy="0" ixz="0" iyy="0.00160" iyz="0" izz="0.00008"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0.125"/>
+      <geometry><box size="0.04 0.04 0.25"/></geometry>
+      <material name="blue"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0.125"/>
+      <geometry><box size="0.04 0.04 0.25"/></geometry>
+    </collision>
+  </link>
+
+  <!-- 肩关节（绕 Y 轴俯仰） -->
+  <joint name="joint1" type="revolute">
+    <origin xyz="0 0 0.10"/>
+    <parent link="base_link"/>
+    <child link="link1"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-2.0" upper="2.0" effort="30" velocity="3.0"/>
+  </joint>
+
+  <!-- 肘关节（绕 Y 轴俯仰） -->
+  <joint name="joint2" type="revolute">
+    <origin xyz="0 0 0.30"/>
+    <parent link="link1"/>
+    <child link="link2"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-2.5" upper="2.5" effort="30" velocity="3.0"/>
+  </joint>
+
+</robot>
