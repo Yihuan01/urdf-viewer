@@ -231,8 +231,8 @@ async function refreshFiles(){
   catch (e){
     fileList.innerHTML = '';
     const d = document.createElement('div');
-    d.className = 'item'; d.style.color = 'var(--err)';
-    d.textContent = '无法列出目录（' + e.message + '）。可在下方手动输入路径。';
+    d.className = 'item'; d.style.color = 'var(--err)'; d.style.whiteSpace = 'normal';
+    d.textContent = e.message + '。可在下方手动输入路径。';
     fileList.appendChild(d);
     return;
   }
