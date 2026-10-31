@@ -1,5 +1,7 @@
 # URDF Viewer
 
+**English** · [中文说明](README.zh-CN.md)
+
 A zero-install URDF viewer that runs in the browser. Open a `.urdf`, drag joint sliders, and toggle collision meshes, joint axes and link frames — no ROS, no build step, no Python packages.
 
 > **Live demo**: <https://yihuan01.github.io/urdf-viewer/>

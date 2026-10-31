@@ -1,5 +1,7 @@
 # URDF Viewer
 
+[English](README.md) · **中文**
+
 一个纯浏览器、零安装的 URDF 查看小工具。打开 `.urdf`，拖动关节滑条，切换碰撞体、关节轴与 link 坐标系——不需要 ROS，不需要构建，也不需要任何 Python 包。
 
 > **在线演示**：<https://yihuan01.github.io/urdf-viewer/>
