@@ -1,88 +1,88 @@
 # URDF Viewer
 
-**English** · [中文说明](README.zh-CN.md)
+[English](README.md) · **中文**
 
-A zero-install URDF viewer that runs in the browser. Open a `.urdf`, drag joint sliders, and toggle collision meshes, joint axes and link frames — no ROS, no build step, no Python packages.
+一个纯浏览器、零安装的 URDF 查看小工具。打开 `.urdf`，拖动关节滑条，切换碰撞体、关节轴与 link 坐标系——不需要 ROS，不需要构建，也不需要任何 Python 包。
 
-> **Live demo**: <https://yihuan01.github.io/urdf-viewer/>
-> The bundled demo model loads automatically. The file browser needs a directory index, which GitHub Pages does not provide — type `examples/demo.urdf` in the path box there.
+> **在线演示**：<https://yihuan01.github.io/urdf-viewer/>
+> 自带示例会自动加载。文件浏览器依赖服务器的目录索引，GitHub Pages 没有，需在路径框手填 `examples/demo.urdf`。
 
 ![URDF Viewer](docs/screenshot.png)
 
-## Requirements
+## 依赖
 
-- **Python 3** — only to serve the directory (`http.server`), no third-party packages.
-- A modern browser (Chrome / Edge / Firefox / Safari).
-- three.js and urdf-loader are loaded from unpkg via CDN, so the **first load needs network access**. To work fully offline, download both libraries and point the import map in `index.html` at your local copies.
+- **Python 3**：仅用于起目录服务（`http.server`），不需要第三方包。
+- 现代浏览器（Chrome / Edge / Firefox / Safari）。
+- three.js 与 urdf-loader 通过 unpkg CDN 加载，**首次打开需联网**。要完全离线用，把两个库下到本地并改 `index.html` 里的 importmap。
 
-## Quick start
+## 快速开始
 
 ```bash
 cd urdf-viewer
-./start_viewer.sh          # default port 8975, opens the browser if possible
-./start_viewer.sh 9000     # custom port
+./start_viewer.sh          # 默认端口 8975，会自动尝试打开浏览器
+./start_viewer.sh 9000     # 自定义端口
 ```
 
-Or serve it yourself (the bundled script also answers the directory-listing endpoint the file browser uses):
+也可以手动起服务（自带脚本额外提供文件浏览器用的目录列表接口）：
 
 ```bash
 python3 serve.py 8975
-# Windows: python serve.py 8975
+# Windows：python serve.py 8975
 ```
 
-Plain `python3 -m http.server 8975` works too, but it will not list a directory that contains an `index.html`, so type the URDF path manually in that case.
+直接用 `python3 -m http.server 8975` 也能看模型，但它不会列出含 `index.html` 的目录，此时需手填 URDF 路径。
 
-Then open <http://127.0.0.1:8975/index.html>.
+然后打开 <http://127.0.0.1:8975/index.html>。
 
-Do **not** double-click `index.html`: under `file://` browsers refuse to fetch mesh files and you get a blank page.
+**不要双击 `index.html`**：`file://` 下浏览器禁止读取网格文件，只会得到白屏。
 
-## Loading your own model
+## 放置你自己的模型
 
-- Put `index.html`, your URDF and its meshes in the same directory (subdirectories are fine), then pick the `.urdf` in the **Model files** browser on the left.
-- Or type a relative path in the box, e.g. `myrobot/urdf/robot.urdf`.
-- Mesh paths inside the URDF are resolved **relative to the URDF file**, so relative paths are the safest:
+- 把 `index.html`、URDF 和网格文件放在同一个目录（可分子目录），在左侧「模型文件」里逐级点选 `.urdf`。
+- 也可以在下方输入框手填相对路径，例如 `myrobot/urdf/robot.urdf`。
+- URDF 里的网格路径按 **URDF 文件所在目录** 解析，写成相对路径最稳：
   ```xml
   <mesh filename="../meshes/base_link.stl"/>
   ```
-- `package://` is not resolved (that would need a ROS environment) — rewrite those paths as relative or absolute ones.
-- Add `?root=../other_robot/` to the URL to browse a directory outside the page's own folder.
-- `examples/demo.urdf` is a minimal two-link arm made of primitives; it needs no mesh files and is a good sanity check.
+- 不解析 `package://`（那需要 ROS 环境），遇到请改成相对或绝对路径。
+- URL 加 `?root=../other_robot/` 可浏览页面目录之外的文件夹。
+- `examples/demo.urdf` 是一个纯几何体的两连杆手臂，不需要网格文件，适合快速验证工具是否正常。
 
-## Features
+## 功能
 
-| Area | What it does |
+| 区域 | 功能 |
 |---|---|
-| **Model files** | Browse directories, load `.urdf` files, or type a path. |
-| **Joints** | One slider per movable joint, showing name, range (degrees for revolute, metres for prismatic) and live value; dragging updates the model immediately. Joints without limits (wheels) open up to ±180°. |
-| **Visual** | Show/hide visual meshes. On by default. |
-| **Collision** | Show/hide collision geometry as translucent orange. Off by default. |
-| **Axis** | Show/hide each joint's rotation/translation axis as a yellow arrow. Off by default. |
-| **Frames** | Show/hide each link's local frame (red = X, green = Y, blue = Z). Off by default. |
-| **Reset** | Zero every joint, restore the default toggles, re-frame the camera. |
+| **模型文件** | 浏览目录、选择 `.urdf` 文件加载；也可手动输入路径。 |
+| **关节面板** | 每个活动关节一根滑条，显示关节名、范围（旋转关节单位度，移动关节单位米）和实时数值；拖动即联动。没有限位的关节（如轮子）自动放开到 ±180°。 |
+| **Visual** | 显示/隐藏视觉网格。默认开。 |
+| **Collision** | 显示/隐藏碰撞体（橙色半透明）。默认关。 |
+| **Axis** | 显示/隐藏各关节的旋转/移动轴箭头（黄色）。默认关。 |
+| **坐标系** | 显示/隐藏每个 link 的局部坐标系（红 = X，绿 = Y，蓝 = Z）。默认关。 |
+| **回归默认** | 所有关节归零、恢复默认开关、相机复位。 |
 
-Collision geometry, with the toggle switched on:
+打开 Collision 开关后的碰撞体显示：
 
 ![Collision view](docs/screenshot-collision.png)
 
-**Mouse**: left drag = orbit, wheel = zoom, right drag = pan.
+**鼠标操作**：左键拖动 = 旋转，滚轮 = 缩放，右键拖动 = 平移。
 
-## Known limitations
+## 已知限制
 
-- Must be served over HTTP; `file://` will not work.
-- `.xacro` files are listed by the browser but **not expanded** — only plain URDF can be parsed.
-- The directory browser asks the bundled `serve.py` for a JSON listing and otherwise scrapes the server's HTML autoindex. Servers with neither — GitHub Pages, for instance — show an empty list; type the path manually.
-- Models are assumed to be **Z-up** (rotated −90° about X for display). A Y-up model needs `robot.rotation.x` adjusted in `index.html`.
-- No animation playback, no IK, no multi-robot scenes.
+- 必须通过 HTTP 服务打开，`file://` 不可用。
+- `.xacro` 会出现在文件列表里，但**不会展开宏**，只能加载纯 URDF。
+- 目录浏览优先问自带的 `serve.py`（JSON 接口），拿不到再解析服务器的 HTML 目录索引。两者都没有的服务器（如 GitHub Pages）会显示空列表，需手填路径。
+- 模型按 **Z-up** 假设摆正（绕 X 轴 −90°）。Y-up 模型需改 `index.html` 里的 `robot.rotation.x`。
+- 没有动画播放、IK、多机器人场景。
 
-## Third-party
+## 第三方
 
 - [three.js](https://threejs.org/) r160 — MIT
 - [urdf-loader](https://github.com/gkjohnson/urdf-loader) 0.12.3 — Apache-2.0
 
-Both are fetched from unpkg at runtime and are not redistributed in this repository.
+两者都在运行时从 unpkg 拉取，本仓库不重新分发它们的代码。
 
-## License
+## 许可
 
 [MIT](LICENSE) © 2026 Yihuan01
 
-A personal tool, shared as-is. No support, no roadmap; fork it and change whatever you like.
+个人自用工具，按现状分享：不保证维护，也没有路线图；随便 fork、随便改。
