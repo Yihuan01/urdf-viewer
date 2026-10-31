@@ -209,7 +209,7 @@ async function scanDirHtml(rel){
   const txt = await res.text();
   const doc = new DOMParser().parseFromString(txt, 'text/html');
   if (doc.getElementById('app')){
-    throw new Error('该目录里有 index.html，服务器没有生成目录列表');
+    throw new Error('服务器不提供目录列表（如 GitHub Pages 或纯静态服务器）');
   }
   const out = [];
   doc.querySelectorAll('a').forEach(a => {
